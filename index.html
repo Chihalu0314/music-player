@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Player with Playlist</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+        }
+        .player {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            width: 350px;
+            text-align: center;
+        }
+        .album-cover {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 5px solid #007bff;
+            position: relative;
+            animation: rotate 0s linear infinite;
+        }
+        .album-cover::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            background: #ffffff;
+            border-radius: 50%;
+            z-index: 1;
+            border: 2px solid #000;
+        }
+        .album-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 0;
+        }
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .controls {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .controls button {
+            margin: 0 5px;
+            padding: 10px;
+            border: none;
+            background: #007bff;
+            color: white;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            width: 50px;
+            height: 50px;
+        }
+        .controls button:hover {
+            background: #0056b3;
+        }
+        .controls input[type="range"] {
+            width: 100%;
+        }
+        .drop-area {
+            margin-top: 10px;
+            padding: 10px;
+            border: 2px dashed #007bff;
+            border-radius: 10px;
+            background: #e0e0e0;
+            cursor: pointer;
+        }
+        .drop-area.dragover {
+            background: #d0d0ff;
+        }
+        .playlist {
+            margin-top: 10px;
+            text-align: left;
+        }
+        .playlist-item {
+            padding: 5px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+        .playlist-item:hover {
+            background: #f0f0f0;
+        }
+        .favorites {
+            margin-top: 10px;
+            text-align: left;
+        }
+        .favorite-item {
+            padding: 5px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+        .favorite-item:hover {
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="player">
+        <h2>Music Player</h2>
+        <div class="album-cover" id="albumCover">
+            <img src="default-cover.jpg" alt="Album Cover" id="albumImage">
+        </div>
+        <div class="controls">
+            <button id="playPauseButton" onclick="togglePlayPause()">&#9658;</button>
+            <input type="range" id="seekBar" value="0">
+        </div>
+        <div class="drop-area" id="dropArea">
+            ここにファイルをドラッグ＆ドロップ
+        </div>
+        <div class="playlist">
+            <h3>プレイリスト</h3>
+            <div id="playlist"></div>
+        </div>
+        <div class="favorites">
+            <h3>お気に入り</h3>
+            <div id="favorites"></div>
+        </div>
+        <input type="file" id="fileInput" accept="audio/*" multiple>
+        <audio id="audioPlayer"></audio>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    <script>
+        const audioPlayer = document.getElementById('audioPlayer');
+        const fileInput = document.getElementById('fileInput');
+        const dropArea = document.getElementById('dropArea');
+        const seekBar = document.getElementById('seekBar');
+        const albumCover = document.getElementById('albumCover');
+        const albumImage = document.getElementById('albumImage');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const playlist = document.getElementById('playlist');
+        const favorites = document.getElementById('favorites');
+
+        let isPlaying = false;
+        let playlistFiles = [];
+        let currentTrackIndex = 0;
+
+        fileInput.addEventListener('change', handleFiles);
+        dropArea.addEventListener('dragover', handleDragOver);
+        dropArea.addEventListener('drop', handleDrop);
+
+        function handleFiles(event) {
+            const files = event.target.files;
+            addFilesToPlaylist(files);
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+            dropArea.classList.add('dragover');
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            dropArea.classList.remove('dragover');
+            const files = event.dataTransfer.files;
+            addFilesToPlaylist(files);
+        }
+
+        function addFilesToPlaylist(files) {
+            for (let i = 0; i < files.length; i++) {
+                playlistFiles.push(files[i]);
+                const listItem = document.createElement('div');
+                listItem.className = 'playlist-item';
+                listItem.textContent = files[i].name;
+                listItem.addEventListener('click', () => {
+                    currentTrackIndex = i;
+                    loadTrack(files[i]);
+                });
+                playlist.appendChild(listItem);
+            }
+            if (playlistFiles.length === 1) {
+                loadTrack(playlistFiles[0]);
+            }
+        }
+
+        function loadTrack(file) {
+            if (file.type.startsWith('audio/')) {
+                const objectURL = URL.createObjectURL(file);
+                audioPlayer.src = objectURL;
+                loadMetadata(file);
+            }
+        }
+
+        function loadMetadata(file) {
+            jsmediatags.read(file, {
+                onSuccess: function(tag) {
+                    const tags = tag.tags;
+                    if (tags.picture) {
+                        const picture = tags.picture;
+                        const base64String = arrayBufferToBase64(picture.data);
+                        albumImage.src = `data:${picture.format};base64,${base64String}`;
+                    }
+                },
+                onError: function(error) {
+                    console.log(error);
+                }
+            });
+        }
+
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+
+        function togglePlayPause() {
+            if (!isPlaying) {
+                audioPlayer.play();
+                playPauseButton.innerHTML = '&#10074;&#10074;';
+                albumCover.style.animationDuration = "15s";
+                isPlaying = true;
+            } else {
+                audioPlayer.pause();
+                playPauseButton.innerHTML = '&#9658;';
+                albumCover.style.animationDuration = "0s";
+                isPlaying = false;
+            }
+        }
+
+        function addToFavorites(file) {
+            const listItem = document.createElement('div');
+            listItem.className = 'favorite-item';
+            listItem.textContent = file.name;
+            listItem.addEventListener('click', () => {
+                loadTrack(file);
+            });
+            favorites.appendChild(listItem);
+        }
+
+        audioPlayer.addEventListener('timeupdate', function() {
+            seekBar.value = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+        });
+
+        seekBar.addEventListener('input', function() {
+            audioPlayer.currentTime = (seekBar.value / 100) * audioPlayer.duration;
+        });
+    </script>
+</body>
+</html>
